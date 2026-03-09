@@ -100,12 +100,14 @@ st.markdown("""
 # =====================================================
 try:
     users = get_users()
-except Exception:
+except Exception as e:
     users = None
+    _conn_error = str(e)
 
 if users is None:
     st.error("Could not connect to Google Sheets. Check your credentials in `.streamlit/secrets.toml`.")
     st.info("Run `python setup_sheets.py` to initialize the spreadsheet first.")
+    st.code(_conn_error)
     st.stop()
 
 if not login_form(users):
