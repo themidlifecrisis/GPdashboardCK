@@ -108,8 +108,8 @@ def can_edit_budgets() -> bool:
 
 
 def can_edit_actuals() -> bool:
-    """Check if user can edit actuals (manager for own branch, accountant for all)."""
-    return st.session_state.get("user_role") in (ROLE_MANAGER, ROLE_ACCOUNTANT)
+    """Check if user can edit actuals (manager for own branch, admin/accountant for all)."""
+    return st.session_state.get("user_role") in (ROLE_MANAGER, ROLE_ADMIN, ROLE_ACCOUNTANT)
 
 
 def get_user_branch() -> str:
