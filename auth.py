@@ -122,3 +122,12 @@ def get_allowed_branches(all_branches):
     if is_director():
         return all_branches
     return [get_user_branch()]
+
+
+def can_view_accountant_report() -> bool:
+    """Visibility for the Accountant Report page.
+
+    Same role set as is_director() today, but kept as its own helper so a
+    future change (e.g. restricting to accountant only) is a one-line edit.
+    """
+    return st.session_state.get("user_role") in (ROLE_ACCOUNTANT, ROLE_DIRECTOR, ROLE_ADMIN)
