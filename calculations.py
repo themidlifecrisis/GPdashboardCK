@@ -119,3 +119,52 @@ def calculate_quarterly_summary(monthly_data) -> dict:
         "gross_profit": gross_profit,
         "gp_pct": gp_pct,
     }
+
+
+def _budget_pct(budget: dict, key: str, default_decimal: float) -> float:
+    """Extract a percentage stored as a whole number (e.g. 7) from a budget row,
+    return as a decimal (0.07). Falls back to default_decimal if missing."""
+    val = budget.get(key, "")
+    if val not in ("", 0, None):
+        try:
+            return float(val) / 100
+        except (ValueError, TypeError):
+            pass
+    return default_decimal
+
+
+def targets_from_budget(budget: dict, cos_other_default: float) -> dict:
+    """Build a calculate_targets call from a budget sheet row dict.
+
+    cos_other_default is the fallback (as a decimal, e.g. 0.07) used when the
+    budget row does not specify cos_other_pct. The caller is responsible for
+    sourcing this value (e.g. from app settings).
+    """
+    return calculate_targets(
+        float(budget.get("sales_target", 0)),
+        float(budget.get("paint_labour_pct", 49)) / 100,
+        float(budget.get("parts_sales_pct", 51)) / 100,
+        float(budget.get("parts_markup", 25)),
+        cos_other_pct=_budget_pct(budget, "cos_other_pct", cos_other_default),
+        rsb_paint_pct=_budget_pct(budget, "rsb_paint_pct", RSB_PAINT_PCT),
+        consumables_pct=_budget_pct(budget, "consumables_pct", CONSUMABLES_PCT),
+    )
+
+
+def actuals_from_row(act: dict, cos_other_pct: float) -> dict:
+    """Build a calculate_gp_actuals call from an actuals sheet row dict.
+
+    cos_other_pct is the configured rate (decimal, e.g. 0.07). The caller
+    is responsible for sourcing this value.
+    """
+    raw_pct = float(act.get("parts_gp_pct", 0))
+    pct_decimal = raw_pct / 100 if raw_pct > 1 else raw_pct
+    return calculate_gp_actuals(
+        sales=float(act.get("sales", 0)),
+        parts_contribution=float(act.get("parts_contribution", 0)),
+        parts_gp_pct=pct_decimal,
+        paints=float(act.get("paints", 0)),
+        consumables_paintshop=float(act.get("consumables_paintshop", 0)),
+        consumables=float(act.get("consumables", 0)),
+        cos_other_pct=cos_other_pct,
+    )

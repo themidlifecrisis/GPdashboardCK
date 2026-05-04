@@ -16,7 +16,14 @@ from auth import (
     login_form,
     logout,
 )
-from calculations import calculate_gp_actuals, calculate_quarterly_summary, calculate_targets, calculate_variance
+from calculations import (
+    actuals_from_row,
+    calculate_gp_actuals,
+    calculate_quarterly_summary,
+    calculate_targets,
+    calculate_variance,
+    targets_from_budget,
+)
 from config import BRANCHES, MONTHS, QUARTERS, RSB_PAINT_PCT, CONSUMABLES_PCT
 from sheets import (
     get_actuals_data,
@@ -169,46 +176,6 @@ def get_cos_other_pct():
         except (ValueError, TypeError):
             pass
     return COST_OF_SALES_OTHER_PCT
-
-
-def _budget_pct(budget, key, default_decimal):
-    """Extract a percentage from budget row. Stored as whole number (e.g. 7), returns decimal (0.07)."""
-    val = budget.get(key, "")
-    if val not in ("", 0, None):
-        try:
-            return float(val) / 100
-        except (ValueError, TypeError):
-            pass
-    return default_decimal
-
-
-def targets_from_budget(budget):
-    """Build calculate_targets call from a budget sheet row dict."""
-    from config import RSB_PAINT_PCT, CONSUMABLES_PCT
-    return calculate_targets(
-        float(budget.get("sales_target", 0)),
-        float(budget.get("paint_labour_pct", 49)) / 100,
-        float(budget.get("parts_sales_pct", 51)) / 100,
-        float(budget.get("parts_markup", 25)),
-        cos_other_pct=_budget_pct(budget, "cos_other_pct", get_cos_other_pct()),
-        rsb_paint_pct=_budget_pct(budget, "rsb_paint_pct", RSB_PAINT_PCT),
-        consumables_pct=_budget_pct(budget, "consumables_pct", CONSUMABLES_PCT),
-    )
-
-
-def actuals_from_row(act):
-    """Build calculate_gp_actuals call from a sheet row dict."""
-    raw_pct = float(act.get("parts_gp_pct", 0))
-    pct_decimal = raw_pct / 100 if raw_pct > 1 else raw_pct
-    return calculate_gp_actuals(
-        sales=float(act.get("sales", 0)),
-        parts_contribution=float(act.get("parts_contribution", 0)),
-        parts_gp_pct=pct_decimal,
-        paints=float(act.get("paints", 0)),
-        consumables_paintshop=float(act.get("consumables_paintshop", 0)),
-        consumables=float(act.get("consumables", 0)),
-        cos_other_pct=get_cos_other_pct(),
-    )
 
 
 def build_gp_table_html(targets, actuals_gp, extras) -> str:
@@ -519,13 +486,13 @@ if page == "📊 Dashboard":
 
     # Calculate targets
     if budget:
-        targets = targets_from_budget(budget)
+        targets = targets_from_budget(budget, get_cos_other_pct())
     else:
         targets = None
 
     # Calculate actuals GP
     if actuals_raw:
-        actuals_gp = actuals_from_row(actuals_raw)
+        actuals_gp = actuals_from_row(actuals_raw, get_cos_other_pct())
         extras = {
             "diagnostics": float(actuals_raw.get("diagnostics", 0)),
             "additionals": float(actuals_raw.get("additionals", 0)),
@@ -748,18 +715,19 @@ elif page == "📈 Quarterly Summary":
             monthly_actuals = []
             monthly_targets = []
             month_labels = []
+            cos_pct = get_cos_other_pct()
 
             for m in q_months:
                 act = get_actuals_for_branch_month(selected_branch, m)
                 bud = get_budget_for_branch_month(selected_branch, m)
 
                 if act:
-                    monthly_actuals.append(actuals_from_row(act))
+                    monthly_actuals.append(actuals_from_row(act, cos_pct))
                 else:
                     monthly_actuals.append(calculate_gp_actuals(0, 0, 0, 0, 0, 0))
 
                 if bud:
-                    monthly_targets.append(targets_from_budget(bud))
+                    monthly_targets.append(targets_from_budget(bud, cos_pct))
                 else:
                     monthly_targets.append(None)
 
@@ -871,13 +839,14 @@ elif page == "📈 Quarterly Summary":
         st.markdown("### Branch Comparison")
 
         branch_data = []
+        cos_pct = get_cos_other_pct()
         for branch in BRANCHES:
             q_months = QUARTERS.get(current_quarter, QUARTERS["Q1"])
             monthly_gps = []
             for m in q_months:
                 act = get_actuals_for_branch_month(branch, m)
                 if act:
-                    monthly_gps.append(actuals_from_row(act))
+                    monthly_gps.append(actuals_from_row(act, cos_pct))
             gp = calculate_quarterly_summary(monthly_gps) if monthly_gps else calculate_gp_actuals(0, 0, 0, 0, 0, 0)
             branch_data.append({"Branch": branch, **gp})
 
