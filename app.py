@@ -1054,7 +1054,27 @@ elif page == "📑 Accountant Report":
         df = pd.DataFrame(report["summary_rows"])
         # Reorder columns to match the Excel summary order (single source of truth in reports.py)
         df = df[SUMMARY_COLUMN_KEYS]
-        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Build display copy so we can convert percent columns from decimals to %
+        display_df = df.copy()
+        PCT_COLS = ["gp_pct_target", "gp_pct_actual", "csi_target", "csi_actual"]
+        for col in PCT_COLS:
+            if col in display_df.columns:
+                display_df[col] = display_df[col] * 100
+
+        # Format currency and percent columns
+        column_config = {
+            key: st.column_config.NumberColumn(format="%.1f%%") if key in PCT_COLS
+            else st.column_config.NumberColumn(format="R %d")
+            for key in SUMMARY_COLUMN_KEYS if key != "branch"
+        }
+
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config=column_config,
+        )
 
         # Excel download
         try:
