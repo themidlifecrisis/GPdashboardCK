@@ -23,9 +23,10 @@ streamlit run app.py
 
 ## Architecture
 
-- **app.py** — Main Streamlit app. All 4 pages (Dashboard, Manager Input, Quarterly Summary, Budget Setup) in one file with sidebar navigation. Renders GP tables as raw HTML for styling control.
+- **app.py** — Main Streamlit app. Pages (Dashboard, Manager Input, Quarterly Summary, Budget Setup, Accountant Report, Settings) live in one file with sidebar navigation. The Accountant Report sidebar entry is hidden for users without the right role. Renders GP tables as raw HTML for styling control.
 - **sheets.py** — Google Sheets data layer via gspread. All reads cached with `st.cache_data` (TTL-based). Handles CRUD for Users, Budget, Actuals, and AuditLog tabs.
 - **calculations.py** — Pure business logic. GP formula: `Sales - Parts Costs - RSB Paint (4%) - Consumables (3%)`. No Streamlit or I/O dependencies.
+- **reports.py** — Pure logic for the Accountant Report. `build_month_report` aggregates budget + actuals across all branches for one month; `build_excel_workbook` serializes that report to an xlsx file using openpyxl. No Streamlit imports — accepts dependencies as arguments.
 - **auth.py** — Session-based auth using `st.session_state`. Passwords hashed with bcrypt. Two roles: `manager` (branch-restricted) and `director` (sees all branches).
 - **config.py** — All constants: branch names, month lists, quarter definitions, GP rates, sheet tab names.
 - **utils.py** — Currency formatting (South African Rand), percentage formatting, variance color helpers.
@@ -43,6 +44,7 @@ streamlit run app.py
 - Managers can only view/edit their own branch
 - Directors can view all branches and manage budgets
 - `get_allowed_branches()` in auth.py enforces branch filtering
+- The Accountant Report page is gated by `can_view_accountant_report()` — visible to accountant, director, admin
 - Google Sheet credentials stored in `.streamlit/secrets.toml` (never committed)
 
 ## GP Calculation
