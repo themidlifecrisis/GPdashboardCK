@@ -321,11 +321,131 @@ def _write_summary_sheet(wb: Workbook, report: dict):
     ws.freeze_panes = "B5"
 
 
+def _write_branch_sheet(wb: Workbook, branch: str, detail: dict, month: str, generated_at: str):
+    """Write one sheet for a single branch — mirrors the dashboard GP table layout."""
+    ws = wb.create_sheet(title=branch[:31])  # Excel sheet-name limit
+    targets = detail["targets"]
+    actuals = detail["actuals"]
+    extras = detail["extras"]
+
+    # Caption
+    ws.cell(row=1, column=1, value=f"{branch} — {month} — Generated {generated_at}").font = Font(italic=True, color="666666")
+
+    # Compute Act % values (as decimals for PCT_FMT)
+    a_sales = actuals["sales"]
+    def pct_of_sales(actual_value: float) -> float:
+        return (actual_value / a_sales) if a_sales > 0 else 0.0
+
+    t_sales = targets["sales_target"]
+    def t_pct_of_sales(target_value: float) -> float:
+        return (target_value / t_sales) if t_sales > 0 else 0.0
+
+    # Section: Targets
+    ws.cell(row=3, column=1, value="Targets").font = SECTION_FONT
+    ws.cell(row=3, column=1).fill = SECTION_FILL
+
+    ws.cell(row=4, column=1, value="Sales Target")
+    ws.cell(row=4, column=2, value=targets["sales_target"]).number_format = CURRENCY_FMT
+
+    ws.cell(row=5, column=1, value="Paint Labour Other Target")
+    ws.cell(row=5, column=2, value=targets["paint_labour_target"]).number_format = CURRENCY_FMT
+
+    ws.cell(row=6, column=1, value="Parts Sales Target")
+    ws.cell(row=6, column=2, value=targets["parts_sales_target"]).number_format = CURRENCY_FMT
+
+    ws.cell(row=7, column=1, value="Parts Markup")
+    ws.cell(row=7, column=2, value=targets["parts_markup"] / 100).number_format = PCT_FMT
+
+    # Section: GP Calculations
+    ws.cell(row=9, column=1, value="GP Calculations").font = SECTION_FONT
+    ws.cell(row=9, column=1).fill = SECTION_FILL
+
+    headers = ["Item", "Target", "Actual", "Variance", "Act %", "Target %"]
+    for col_idx, label in enumerate(headers, start=1):
+        c = ws.cell(row=10, column=col_idx, value=label)
+        c.fill = HEADER_FILL
+        c.font = HEADER_FONT
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Rows: (label, target, actual, is_cost)
+    gp_rows = [
+        ("Sales",                targets["sales_target"], actuals["sales"], False),
+        ("Parts Costs",          targets["parts_costs"],  actuals["parts_costs"], True),
+        ("Cost of Sales Other",  targets["cos_other"],    actuals["cos_other"], True),
+        ("RSB Paint",            targets["rsb_paint"],    actuals["rsb_paint"], True),
+        ("Consumables Combined", targets["consumables"],  actuals["consumables_combined"], True),
+    ]
+    var_first_row = 11
+    for offset, (label, t_val, a_val, is_cost) in enumerate(gp_rows):
+        r = var_first_row + offset
+        ws.cell(row=r, column=1, value=label)
+        ws.cell(row=r, column=2, value=t_val).number_format = CURRENCY_FMT
+        ws.cell(row=r, column=3, value=a_val).number_format = CURRENCY_FMT
+        ws.cell(row=r, column=4, value=a_val - t_val).number_format = CURRENCY_FMT
+        ws.cell(row=r, column=5, value=pct_of_sales(a_val)).number_format = PCT_FMT
+        ws.cell(row=r, column=6, value=t_pct_of_sales(t_val)).number_format = PCT_FMT
+        # Per-row variance colouring via conditional formatting
+        col_letter = get_column_letter(4)
+        _apply_variance_colour(ws, col_letter, r, r, is_cost)
+
+    var_last_row = var_first_row + len(gp_rows) - 1
+    gp_row = var_last_row + 1
+    pct_row = var_last_row + 2
+
+    ws.cell(row=gp_row, column=1, value="Gross Profit").font = TOTAL_FONT
+    ws.cell(row=gp_row, column=2, value=targets["gross_profit"]).number_format = CURRENCY_FMT
+    ws.cell(row=gp_row, column=3, value=actuals["gross_profit"]).number_format = CURRENCY_FMT
+    ws.cell(row=gp_row, column=4, value=actuals["gross_profit"] - targets["gross_profit"]).number_format = CURRENCY_FMT
+    for c in range(1, 5):
+        ws.cell(row=gp_row, column=c).font = TOTAL_FONT
+    _apply_variance_colour(ws, "D", gp_row, gp_row, False)
+
+    ws.cell(row=pct_row, column=1, value="GP %").font = TOTAL_FONT
+    ws.cell(row=pct_row, column=2, value=targets["gp_pct"] / 100).number_format = PCT_FMT
+    ws.cell(row=pct_row, column=3, value=actuals["gp_pct"] / 100).number_format = PCT_FMT
+    ws.cell(row=pct_row, column=4, value=(actuals["gp_pct"] - targets["gp_pct"]) / 100).number_format = PCT_FMT
+    for c in range(1, 5):
+        ws.cell(row=pct_row, column=c).font = TOTAL_FONT
+
+    # Section: Additional KPIs
+    kpi_section_row = pct_row + 2
+    ws.cell(row=kpi_section_row, column=1, value="Additional KPIs").font = SECTION_FONT
+    ws.cell(row=kpi_section_row, column=1).fill = SECTION_FILL
+
+    kpi_rows = [
+        ("Diagnostics", extras.get("diagnostics_target", 0), extras.get("diagnostics", 0), "currency"),
+        ("Additionals", extras.get("additionals_target", 0), extras.get("additionals", 0), "currency"),
+        ("CSI",         extras.get("csi_target", 0) / 100,   extras.get("csi", 0) / 100,   "percent"),
+    ]
+    for offset, (label, t_val, a_val, fmt) in enumerate(kpi_rows):
+        r = kpi_section_row + 1 + offset
+        ws.cell(row=r, column=1, value=label)
+        cell_t = ws.cell(row=r, column=2, value=t_val)
+        cell_a = ws.cell(row=r, column=3, value=a_val)
+        if fmt == "currency":
+            cell_t.number_format = CURRENCY_FMT
+            cell_a.number_format = CURRENCY_FMT
+            ws.cell(row=r, column=4, value=a_val - t_val).number_format = CURRENCY_FMT
+        else:
+            cell_t.number_format = PCT_FMT
+            cell_a.number_format = PCT_FMT
+            # No variance cell for CSI (matches dashboard behaviour)
+
+    # Column widths
+    ws.column_dimensions["A"].width = 28
+    for col in ["B", "C", "D", "E", "F"]:
+        ws.column_dimensions[col].width = 16
+
+    # Freeze top 2 rows
+    ws.freeze_panes = "A3"
+
+
 def build_excel_workbook(report: dict) -> bytes:
     """Serialize a report dict (from build_month_report) to xlsx bytes."""
     wb = Workbook()
     _write_summary_sheet(wb, report)
-    # Per-branch sheets come in a follow-up task.
+    for branch, detail in report["branch_details"].items():
+        _write_branch_sheet(wb, branch, detail, report["month"], report["generated_at"])
 
     buf = BytesIO()
     wb.save(buf)
