@@ -1,5 +1,7 @@
 """GP Dashboard — Gross Profit Calculations & Analysis."""
 
+from datetime import date
+
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -37,7 +39,7 @@ from sheets import (
     save_budget,
     save_setting,
 )
-from reports import build_excel_workbook, build_month_report
+from reports import SUMMARY_COLUMN_KEYS, build_excel_workbook, build_month_report
 from utils import fmt_currency, fmt_pct, fmt_variance, variance_color
 
 # --- Page config ---
@@ -1050,27 +1052,13 @@ elif page == "📑 Accountant Report":
 
         # On-screen table
         df = pd.DataFrame(report["summary_rows"])
-        # Reorder columns to match the Excel summary order
-        column_order = [
-            "branch",
-            "sales_target", "sales_actual", "sales_var",
-            "parts_costs_target", "parts_costs_actual", "parts_costs_var",
-            "cos_other_target", "cos_other_actual", "cos_other_var",
-            "rsb_paint_target", "rsb_paint_actual", "rsb_paint_var",
-            "consumables_target", "consumables_actual", "consumables_var",
-            "gp_target", "gp_actual", "gp_var",
-            "gp_pct_target", "gp_pct_actual",
-            "diagnostics_target", "diagnostics_actual",
-            "additionals_target", "additionals_actual",
-            "csi_target", "csi_actual",
-        ]
-        df = df[column_order]
+        # Reorder columns to match the Excel summary order (single source of truth in reports.py)
+        df = df[SUMMARY_COLUMN_KEYS]
         st.dataframe(df, use_container_width=True, hide_index=True)
 
         # Excel download
         try:
             xlsx_bytes = build_excel_workbook(report)
-            from datetime import date
             filename = f"GP_Report_{selected_month}_{date.today().isoformat()}.xlsx"
             st.download_button(
                 "⬇️ Download Excel",

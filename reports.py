@@ -251,6 +251,10 @@ _SUMMARY_COLUMNS = [
     ("CSI Actual",            "csi_actual",          "percent",  False),
 ]
 
+# Public list of summary-row keys in canonical column order.
+# Re-export so on-screen renderers (e.g. app.py) share the same schema as the Excel writer.
+SUMMARY_COLUMN_KEYS = [key for (_label, key, _fmt, _is_cost) in _SUMMARY_COLUMNS]
+
 
 def _apply_variance_colour(ws, col_letter: str, first_row: int, last_row: int, is_cost: bool):
     """Add conditional formatting: green for 'good' variance, red for 'bad'.
