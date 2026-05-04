@@ -4,8 +4,8 @@ Two public functions:
 - build_month_report(month, cos_other_pct, budget_df, actuals_df)
     Returns a structured report dict.
 - build_excel_workbook(report)
-    Returns xlsx bytes (Summary sheet today; per-branch detail sheets
-    are added in Task 6).
+    Returns xlsx bytes for a multi-sheet workbook: a cross-branch
+    Summary plus one detail sheet per branch.
 """
 
 from datetime import datetime
@@ -331,14 +331,9 @@ def _write_branch_sheet(wb: Workbook, branch: str, detail: dict, month: str, gen
     # Caption
     ws.cell(row=1, column=1, value=f"{branch} — {month} — Generated {generated_at}").font = Font(italic=True, color="666666")
 
-    # Compute Act % values (as decimals for PCT_FMT)
+    # Used for Act % / Target % columns below
     a_sales = actuals["sales"]
-    def pct_of_sales(actual_value: float) -> float:
-        return (actual_value / a_sales) if a_sales > 0 else 0.0
-
     t_sales = targets["sales_target"]
-    def t_pct_of_sales(target_value: float) -> float:
-        return (target_value / t_sales) if t_sales > 0 else 0.0
 
     # Section: Targets
     ws.cell(row=3, column=1, value="Targets").font = SECTION_FONT
@@ -382,11 +377,10 @@ def _write_branch_sheet(wb: Workbook, branch: str, detail: dict, month: str, gen
         ws.cell(row=r, column=2, value=t_val).number_format = CURRENCY_FMT
         ws.cell(row=r, column=3, value=a_val).number_format = CURRENCY_FMT
         ws.cell(row=r, column=4, value=a_val - t_val).number_format = CURRENCY_FMT
-        ws.cell(row=r, column=5, value=pct_of_sales(a_val)).number_format = PCT_FMT
-        ws.cell(row=r, column=6, value=t_pct_of_sales(t_val)).number_format = PCT_FMT
+        ws.cell(row=r, column=5, value=(a_val / a_sales) if a_sales > 0 else 0.0).number_format = PCT_FMT
+        ws.cell(row=r, column=6, value=(t_val / t_sales) if t_sales > 0 else 0.0).number_format = PCT_FMT
         # Per-row variance colouring via conditional formatting
-        col_letter = get_column_letter(4)
-        _apply_variance_colour(ws, col_letter, r, r, is_cost)
+        _apply_variance_colour(ws, "D", r, r, is_cost)
 
     var_last_row = var_first_row + len(gp_rows) - 1
     gp_row = var_last_row + 1
