@@ -9,6 +9,7 @@ import plotly.express as px
 from auth import (
     can_edit_actuals,
     can_edit_budgets,
+    can_view_accountant_report,
     get_allowed_branches,
     get_user_branch,
     is_director,
@@ -36,6 +37,7 @@ from sheets import (
     save_budget,
     save_setting,
 )
+from reports import build_excel_workbook, build_month_report
 from utils import fmt_currency, fmt_pct, fmt_variance, variance_color
 
 # --- Page config ---
@@ -138,9 +140,13 @@ with st.sidebar:
     st.divider()
 
     # Navigation
+    nav_options = ["📊 Dashboard", "📝 Manager Input", "📈 Quarterly Summary", "🎯 Budget Setup"]
+    if can_view_accountant_report():
+        nav_options.append("📑 Accountant Report")
+    nav_options.append("⚙️ Settings")
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "📝 Manager Input", "📈 Quarterly Summary", "🎯 Budget Setup", "⚙️ Settings"],
+        nav_options,
         label_visibility="collapsed",
     )
 
@@ -1000,6 +1006,82 @@ elif page == "🎯 Budget Setup":
         c1.metric("Target GP", fmt_currency(preview["gross_profit"]))
         c2.metric("Target GP %", fmt_pct(preview["gp_pct"]))
         c3.metric("Parts Costs (derived)", fmt_currency(preview["parts_costs"]))
+
+
+# =====================================================
+# PAGE: ACCOUNTANT REPORT (Accountants, Directors, Admins)
+# =====================================================
+elif page == "📑 Accountant Report":
+    if not can_view_accountant_report():
+        st.warning("This report is only available to accountants and directors.")
+        st.stop()
+
+    st.markdown(f"## 📑 Accountant Report — {selected_month}")
+    st.caption("Cross-branch GP summary for the selected month. Use the sidebar to change the month.")
+
+    # Cache key by month so re-clicks don't re-fetch
+    cache_key = f"accountant_report::{selected_month}"
+
+    if st.button("🔄 Generate Report", type="primary"):
+        try:
+            budget_df = get_budget_data()
+            actuals_df = get_actuals_data()
+            report = build_month_report(
+                month=selected_month,
+                cos_other_pct=get_cos_other_pct(),
+                budget_df=budget_df,
+                actuals_df=actuals_df,
+            )
+            st.session_state[cache_key] = report
+        except Exception as e:
+            st.error(f"Failed to generate report: {e}")
+            st.stop()
+
+    report = st.session_state.get(cache_key)
+    if report is None:
+        st.info("Click **Generate Report** to load data for this month.")
+    else:
+        # Coverage caption
+        st.caption(
+            f"{report['branches_with_budget']} of {len(BRANCHES)} branches have budgets set · "
+            f"{report['branches_with_actuals']} of {len(BRANCHES)} branches have actuals captured · "
+            f"Generated {report['generated_at']}"
+        )
+
+        # On-screen table
+        df = pd.DataFrame(report["summary_rows"])
+        # Reorder columns to match the Excel summary order
+        column_order = [
+            "branch",
+            "sales_target", "sales_actual", "sales_var",
+            "parts_costs_target", "parts_costs_actual", "parts_costs_var",
+            "cos_other_target", "cos_other_actual", "cos_other_var",
+            "rsb_paint_target", "rsb_paint_actual", "rsb_paint_var",
+            "consumables_target", "consumables_actual", "consumables_var",
+            "gp_target", "gp_actual", "gp_var",
+            "gp_pct_target", "gp_pct_actual",
+            "diagnostics_target", "diagnostics_actual",
+            "additionals_target", "additionals_actual",
+            "csi_target", "csi_actual",
+        ]
+        df = df[column_order]
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Excel download
+        try:
+            xlsx_bytes = build_excel_workbook(report)
+            from datetime import date
+            filename = f"GP_Report_{selected_month}_{date.today().isoformat()}.xlsx"
+            st.download_button(
+                "⬇️ Download Excel",
+                data=xlsx_bytes,
+                file_name=filename,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+            st.caption("Workbook contains a Summary sheet and one detail sheet per branch.")
+        except Exception as e:
+            st.error(f"Failed to build Excel workbook: {e}")
 
 
 # =====================================================
