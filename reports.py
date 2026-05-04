@@ -4,8 +4,8 @@ Two public functions:
 - build_month_report(month, cos_other_pct, budget_df, actuals_df)
     Returns a structured report dict.
 - build_excel_workbook(report)
-    Returns xlsx bytes for download. Defined in this module (added in
-    a later task).
+    Returns xlsx bytes (Summary sheet today; per-branch detail sheets
+    are added in Task 6).
 """
 
 from datetime import datetime
